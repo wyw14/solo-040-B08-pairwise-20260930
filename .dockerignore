@@ -1,0 +1,6 @@
+.git
+.verification-cache
+var
+*.log
+lockflow
+lockflow.exe

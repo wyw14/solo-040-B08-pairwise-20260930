@@ -1,0 +1,5 @@
+/lockflow.exe
+/lockflow
+/var/
+/.verification-cache/
+*.log
