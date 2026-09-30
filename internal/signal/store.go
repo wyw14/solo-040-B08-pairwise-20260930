@@ -17,10 +17,10 @@ type Store struct {
 
 func NewStore() *Store { return &Store{states: make(map[uuid.UUID]model.SignalState)} }
 
-func (s *Store) Set(vesselID, cycleID uuid.UUID, generation uint64, aspect model.SignalAspect, now time.Time) model.SignalState {
+func (s *Store) Set(vesselID, cycleID uuid.UUID, generation uint64, stage model.TransitStage, aspect model.SignalAspect, now time.Time) model.SignalState {
 	state := model.SignalState{
 		VesselID: vesselID, CycleID: cycleID, Generation: generation,
-		Aspect: aspect, UpdatedAt: now.UTC(),
+		Stage: stage, Aspect: aspect, UpdatedAt: now.UTC(),
 	}
 	s.mu.Lock()
 	s.states[vesselID] = state

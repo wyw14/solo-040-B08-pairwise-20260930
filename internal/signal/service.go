@@ -48,6 +48,9 @@ func (s *Service) ConfirmHandoff(ctx context.Context, handoff Handoff) error {
 	if !current.IdentityMatches(handoff.CycleID, handoff.Generation) {
 		return errors.New("handoff belongs to another transit generation")
 	}
+	if current.Stage != model.StageReleasing {
+		return errors.New("signal handoff requires releasing stage")
+	}
 	if err := s.lookup.ApplySignalHandoff(ctx, handoff.CycleID, handoff.Generation); err != nil {
 		return err
 	}

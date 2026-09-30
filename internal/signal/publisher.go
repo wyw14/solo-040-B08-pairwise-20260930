@@ -3,6 +3,7 @@ package signal
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,6 +37,15 @@ func (p *Publisher) Publish(ctx context.Context, cycle model.TransitCycle, vesse
 		CycleID: cycle.ID, Generation: cycle.Generation,
 		Previous: make(map[uuid.UUID]model.SignalState),
 	}
+	if len(vessels) == 0 {
+		return publication, errors.New("cannot publish signals for an empty convoy")
+	}
+	if cycle.Stage.Terminal() {
+		return publication, errors.New("cannot publish signals for a terminal transit")
+	}
+	if !aspect.Valid() {
+		return publication, fmt.Errorf("invalid signal aspect %q", aspect)
+	}
 	for _, vessel := range vessels {
 		if err := ctx.Err(); err != nil {
 			p.Compensate(context.WithoutCancel(ctx), cycle.ChamberID, publication)
@@ -44,7 +54,7 @@ func (p *Publisher) Publish(ctx context.Context, cycle model.TransitCycle, vesse
 		if previous, ok := p.store.Get(vessel.ID); ok {
 			publication.Previous[vessel.ID] = previous
 		}
-		state := p.store.Set(vessel.ID, cycle.ID, cycle.Generation, aspect, p.now())
+		state := p.store.Set(vessel.ID, cycle.ID, cycle.Generation, cycle.Stage, aspect, p.now())
 		publication.Published = append(publication.Published, vessel.ID)
 		if _, err := p.recorder.Record(ctx, cycle.ChamberID, model.EventSignalChanged, cycle.ID, cycle.Generation, state); err != nil {
 			p.Compensate(context.WithoutCancel(ctx), cycle.ChamberID, publication)
@@ -59,7 +69,7 @@ func (p *Publisher) Compensate(ctx context.Context, chamberID string, publicatio
 	for index := len(publication.Published) - 1; index >= 0; index-- {
 		vesselID := publication.Published[index]
 		if previous, ok := publication.Previous[vesselID]; ok {
-			p.store.Set(previous.VesselID, previous.CycleID, previous.Generation, previous.Aspect, p.now())
+			p.store.Set(previous.VesselID, previous.CycleID, previous.Generation, previous.Stage, previous.Aspect, p.now())
 		} else {
 			p.store.Remove(vesselID)
 		}

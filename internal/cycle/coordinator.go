@@ -11,6 +11,7 @@ import (
 	"github.com/wyw14/cry-96/internal/hydraulics"
 	"github.com/wyw14/cry-96/internal/journal"
 	"github.com/wyw14/cry-96/internal/model"
+	"github.com/wyw14/cry-96/internal/signal"
 )
 
 // Coordinator is the authoritative owner of active transit generations.
@@ -20,17 +21,19 @@ type Coordinator struct {
 	generations map[string]uint64
 	gates       *gate.Controller
 	hydraulics  *hydraulics.Controller
+	signals     *signal.Store
 	recorder    *journal.Recorder
 	now         func() time.Time
 }
 
-func NewCoordinator(gates *gate.Controller, hydraulicsController *hydraulics.Controller, recorder *journal.Recorder, now func() time.Time) *Coordinator {
+func NewCoordinator(gates *gate.Controller, hydraulicsController *hydraulics.Controller, signalStore *signal.Store, recorder *journal.Recorder, now func() time.Time) *Coordinator {
 	if now == nil {
 		now = time.Now
 	}
 	return &Coordinator{
 		current: make(map[string]model.TransitCycle), generations: make(map[string]uint64),
-		gates: gates, hydraulics: hydraulicsController, recorder: recorder, now: now,
+		gates: gates, hydraulics: hydraulicsController, signals: signalStore,
+		recorder: recorder, now: now,
 	}
 }
 
@@ -41,7 +44,11 @@ func (c *Coordinator) Start(ctx context.Context, plan model.ConvoyPlan) (model.T
 		return model.TransitCycle{}, errors.New("chamber already has an active transit")
 	}
 	c.generations[plan.ChamberID]++
-	cycleValue, err := model.NewTransitCycle(plan.ChamberID, plan.ID, plan.Direction, c.generations[plan.ChamberID], c.now())
+	vesselIDs := make([]uuid.UUID, 0, len(plan.Vessels))
+	for _, vessel := range plan.Vessels {
+		vesselIDs = append(vesselIDs, vessel.ID)
+	}
+	cycleValue, err := model.NewTransitCycle(plan.ChamberID, plan.ID, plan.Direction, c.generations[plan.ChamberID], vesselIDs, c.now())
 	if err == nil {
 		c.current[plan.ChamberID] = cycleValue
 	}
@@ -124,11 +131,14 @@ func (c *Coordinator) ApplySignalHandoff(ctx context.Context, cycleID uuid.UUID,
 		c.mu.Unlock()
 		return errors.New("signal handoff transit is not current")
 	}
-	if err := applySignalTransition(&cycleValue); err != nil {
+	if c.signals == nil {
+		c.mu.Unlock()
+		return errors.New("release signal state is unavailable")
+	}
+	if err := applySignalTransition(&cycleValue, c.signals.List(), c.now()); err != nil {
 		c.mu.Unlock()
 		return err
 	}
-	cycleValue.UpdatedAt = c.now().UTC()
 	c.current[chamberID] = cycleValue
 	c.mu.Unlock()
 	_, err := c.recorder.Record(ctx, chamberID, model.EventCycleAdvanced, cycleValue.ID, generation, cycleValue)

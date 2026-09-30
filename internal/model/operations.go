@@ -66,10 +66,15 @@ const (
 	SignalHold    SignalAspect = "hold"
 )
 
+func (a SignalAspect) Valid() bool {
+	return a == SignalStop || a == SignalProceed || a == SignalHold
+}
+
 type SignalState struct {
 	VesselID   uuid.UUID    `json:"vessel_id"`
 	CycleID    uuid.UUID    `json:"cycle_id"`
 	Generation uint64       `json:"generation"`
+	Stage      TransitStage `json:"stage"`
 	Aspect     SignalAspect `json:"aspect"`
 	UpdatedAt  time.Time    `json:"updated_at"`
 }

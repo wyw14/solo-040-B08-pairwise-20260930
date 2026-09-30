@@ -2,6 +2,7 @@ package cycle
 
 import (
 	"errors"
+	"time"
 
 	"github.com/wyw14/cry-96/internal/model"
 )
@@ -21,14 +22,24 @@ func nextAfterGate(stage model.TransitStage) (model.TransitStage, error) {
 	}
 }
 
-func applySignalTransition(current *model.TransitCycle) error {
+// applySignalTransition only completes a releasing transit once every convoy
+// member holds a current-generation proceed signal. Empty releases, missing
+// members and stale signals are rejected, and a terminal transit can never be
+// completed a second time.
+func applySignalTransition(current *model.TransitCycle, states []model.SignalState, now time.Time) error {
 	if current.Stage.Terminal() {
 		return errors.New("terminal transit cannot accept signal handoff")
 	}
-	if current.Stage == model.StageReleasing {
-		return current.Advance(model.StageCompleted, "field signal handoff confirmed", current.UpdatedAt.Add(1))
+	if current.Stage != model.StageReleasing {
+		return errors.New("signal handoff requires releasing stage")
 	}
-	return errors.New("signal handoff requires releasing stage")
+	if len(current.VesselIDs) == 0 {
+		return errors.New("convoy has no members to confirm release")
+	}
+	if !current.HasReleaseSignals(states) {
+		return errors.New("release signals missing for one or more convoy members")
+	}
+	return current.Advance(model.StageCompleted, "field signal handoff confirmed", now)
 }
 
 func terminalStage(reason string) model.TransitStage {

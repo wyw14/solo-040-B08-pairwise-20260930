@@ -46,7 +46,7 @@ func (c *Controller) Evaluate(ctx context.Context, cycle model.TransitCycle) (De
 	if !c.gates.Sealed(cycle.ChamberID) {
 		return Decision{VesselID: entry.Vessel.ID, Reason: "chamber gates are not sealed"}, nil
 	}
-	state := c.signals.Set(entry.Vessel.ID, cycle.ID, cycle.Generation, model.SignalProceed, c.now())
+	state := c.signals.Set(entry.Vessel.ID, cycle.ID, cycle.Generation, cycle.Stage, model.SignalProceed, c.now())
 	if state.Aspect != model.SignalProceed || !c.queue.MarkReleased(cycle.ChamberID, entry.Vessel.ID) {
 		return Decision{}, errors.New("failed to commit admission decision")
 	}
